@@ -62,3 +62,29 @@ Each demo folder has its own README with the talk beats it supports.
 Record each demo working (`--show` windows + terminal) *before* the talk.
 If a demo fails live, play the recording and keep narrating - the audience
 came for the ideas.
+
+## Browser editions (`web/`) - the online demo lab
+
+Static re-implementations that run the same ideas in any modern browser -
+no Python, no server, hostable on GitHub Pages:
+
+| Page | Stack | Notes |
+| ---- | ----- | ----- |
+| `web/demo0/` | transformers.js + whisper-tiny (wasm) | Voice-controlled mini deck ("Lanjut"/"Kembali") |
+| `web/demo1/` | MediaPipe PoseLandmarker | Webcam people counter + raised hands; feeds Demo 2 via localStorage |
+| `web/demo2-stlite/` | stlite (real Streamlit in Pyodide) | Reads Demo 1's counts live; labeled simulation fallback |
+| `web/demo3/` | MQTT.js over `wss://broker.emqx.io:8084` | Phone IMU -> public broker -> live feed + shake detection; simulator fallback |
+
+First load needs internet (models/wheels from public CDNs, then cached).
+Demo 3 relays through a free public broker by design.
+
+### Publish on GitHub Pages
+
+```bash
+git init && git add -A && git commit -m "Edge AI demo lab"
+gh repo create edge-ai-multimodal-demos --public --source=. --push
+gh api repos/{owner}/edge-ai-multimodal-demos/pages -X POST -f "source[branch]=main" -f "source[path]=/"
+# live at https://<username>.github.io/edge-ai-multimodal-demos/ in ~1 minute
+```
+
+(The repo root `index.html` redirects into `web/`, so serving from the root works as-is.)
