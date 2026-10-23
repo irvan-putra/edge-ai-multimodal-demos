@@ -1,0 +1,17 @@
+# Hub (phone -> laptop bridge)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+paho-mqtt>=1.6
+
+# Demo 0 - voice slide control
+faster-whisper>=1.0
+numpy>=1.26
+pynput>=1.7
+
+# Demo 1 - vision counter
+ultralytics>=8.2
+opencv-python>=4.9
+
+# Demo 2 - live dashboard
+streamlit>=1.33
+pandas>=2.2

@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+demo1_vision_counter/state.json
+*.pt
+.DS_Store

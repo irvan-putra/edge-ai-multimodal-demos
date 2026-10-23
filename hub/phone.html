@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone-as-a-Sensor</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#f4efec; color:#251f21;
+         display:flex; flex-direction:column; align-items:center; gap:12px; padding:24px; }
+  button { font-size:18px; padding:14px 28px; border:none; border-radius:12px;
+           background:#73a89a; color:#fff; width:100%; max-width:320px; }
+  button.on { background:#251f21; }
+  #status { font-size:14px; color:#585254; }
+  video { width:100%; max-width:320px; border-radius:12px; }
+</style>
+</head>
+<body>
+<h2>Phone-as-a-Sensor</h2>
+<p id="status">connecting&hellip;</p>
+<button id="mic">&#127908; Microphone</button>
+<button id="cam">&#128247; Camera</button>
+<button id="imu">&#128202; Motion</button>
+<video id="preview" autoplay playsinline muted></video>
+<script>
+// One WebSocket carries all three streams. Payloads are JSON with a "kind"
+// field; the laptop hub fans them out onto MQTT topics.
+const ws = new WebSocket(`ws://${location.host}/ws`);
+const statusEl = document.getElementById('status');
+ws.onopen  = () => statusEl.textContent = 'connected to ' + location.host;
+ws.onclose = () => statusEl.textContent = 'disconnected - reload to retry';
+
+// --- microphone: PCM16 mono, sent as base64 chunks (~100 ms each) ---
+let micOn = false;
+document.getElementById('mic').onclick = async () => {
+  micOn = !micOn; document.getElementById('mic').classList.toggle('on', micOn);
+  if (!micOn) return;
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const ctx = new AudioContext();                 // usually 44.1/48 kHz
+  const src = ctx.createMediaStreamSource(stream);
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  proc.onaudioprocess = e => {
+    const f32 = e.inputBuffer.getChannelData(0);
+    const pcm = new Int16Array(f32.length);
+    for (let i = 0; i < f32.length; i++) pcm[i] = Math.max(-1, Math.min(1, f32[i])) * 32767;
+    const b64 = btoa(String.fromCharCode(...new Uint8Array(pcm.buffer)));
+    ws.send(JSON.stringify({ kind: 'audio', rate: ctx.sampleRate, data: b64 }));
+  };
+  src.connect(proc); proc.connect(ctx.destination);
+};
+
+// --- camera: JPEG frames every 250 ms ---
+let camOn = false, camTimer = null;
+document.getElementById('cam').onclick = async () => {
+  camOn = !camOn; document.getElementById('cam').classList.toggle('on', camOn);
+  if (camOn) {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: 640 } });
+    const v = document.getElementById('preview'); v.srcObject = stream;
+    const c = document.createElement('canvas'); const g = c.getContext('2d');
+    camTimer = setInterval(() => {
+      c.width = v.videoWidth; c.height = v.videoHeight;
+      g.drawImage(v, 0, 0);
+      const b64 = c.toDataURL('image/jpeg', 0.6).split(',')[1];
+      ws.send(JSON.stringify({ kind: 'frame', data: b64 }));
+    }, 250);
+  } else { clearInterval(camTimer); }
+};
+
+// --- motion: devicemotion events at ~10 Hz ---
+let imuOn = false, last = 0;
+document.getElementById('imu').onclick = async () => {
+  // iOS 13+ needs an explicit permission gesture
+  if (typeof DeviceMotionEvent !== 'undefined' &&
+      typeof DeviceMotionEvent.requestPermission === 'function')
+    await DeviceMotionEvent.requestPermission();
+  imuOn = !imuOn; document.getElementById('imu').classList.toggle('on', imuOn);
+};
+window.addEventListener('devicemotion', e => {
+  if (!imuOn || Date.now() - last < 100) return;
+  last = Date.now();
+  const a = e.accelerationIncludingGravity || {};
+  ws.send(JSON.stringify({ kind: 'sensor', data: JSON.stringify(
+    { x: a.x || 0, y: a.y || 0, z: a.z || 0, t: Date.now() }) }));
+});
+</script>
+</body>
+</html>
