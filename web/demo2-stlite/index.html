@@ -33,21 +33,36 @@ stlite.mount({
 import json, time, random
 import pandas as pd
 import streamlit as st
-from js import localStorage
 
 st.set_page_config(page_title="Live Audience Dashboard", layout="wide")
 st.title("Live Audience Dashboard")
 
+# stlite runs this app in a Web Worker: no localStorage, no custom components.
+# But BroadcastChannel DOES exist in workers - Demo 1 already publishes counts there.
+@st.cache_resource
+def get_live_inbox():
+    state = {"latest": None}
+    try:
+        from js import BroadcastChannel
+        from pyodide.ffi import create_proxy
+        ch = BroadcastChannel.new("demo-lab")
+        def onmsg(event):
+            d = event.data
+            state["latest"] = {"people": d.people, "hands_up": d.hands_up, "t": d.t}
+        ch.onmessage = create_proxy(onmsg)
+        state["channel"] = ch
+    except Exception:
+        pass
+    return state
+
 def read_counts():
-    raw = localStorage.getItem("demoLabCounts")
-    if raw:
-        try:
-            d = json.loads(raw)
-            # live if the writer updated within the last 5 seconds
-            if time.time() * 1000 - d.get("t", 0) < 5000:
-                return d["people"], d["hands_up"], "live"
-        except Exception:
-            pass
+    # live if Demo 1 (camera tab) posted within the last 5 seconds
+    d = get_live_inbox()["latest"]
+    try:
+        if d and time.time() * 1000 - d.get("t", 0) < 5000:
+            return d["people"], d["hands_up"], "live"
+    except Exception:
+        pass
     return None, None, "simulated"
 
 if "history" not in st.session_state:

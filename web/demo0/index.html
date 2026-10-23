@@ -59,11 +59,24 @@ let transcriber = null;
 document.getElementById('start').onclick = async (e) => {
   e.target.disabled = true;
   statusEl.textContent = 'Loading Whisper (one-time download)...';
-  const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1');
-  transcriber = transcriber || await pipeline('automatic-speech-recognition', 'onnx-community/whisper-tiny', { device: 'wasm' });
+  try {
+    const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1');
+    transcriber = transcriber || await pipeline('automatic-speech-recognition', 'onnx-community/whisper-tiny', { device: 'wasm' });
+  } catch (err) {
+    statusEl.textContent = 'Model failed to load: ' + err.message + ' - check the connection and press Start again.';
+    e.target.disabled = false;
+    return;
+  }
   statusEl.textContent = 'Model ready. Listening...';
 
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    statusEl.textContent = 'Microphone error: ' + err.message + ' - allow the mic in the browser address bar, then press Start again.';
+    e.target.disabled = false;
+    return;
+  }
   const ctx = new AudioContext({ sampleRate: 16000 });
   const src = ctx.createMediaStreamSource(stream);
   const proc = ctx.createScriptProcessor(4096, 1, 1);
