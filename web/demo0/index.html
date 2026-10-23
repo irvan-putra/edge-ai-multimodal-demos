@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo 0 - Voice slide control</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#f4efec; color:#251f21; margin:0; padding:24px; }
+  main { max-width: 720px; margin: 0 auto; background:#fff; border-radius:24px; padding:28px; }
+  .tag { color:#4e7f72; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  #slide { background:#251f21; color:#fff; border-radius:16px; padding:36px 28px; min-height:180px; margin:16px 0; }
+  #slide h2 { margin:0 0 8px; font-size:24px; } #slide p { color:#d8d2d3; margin:0; }
+  #slide .n { color:#73a89a; font-size:13px; font-weight:600; }
+  button { font-size:16px; padding:12px 22px; border:none; border-radius:12px; background:#73a89a; color:#fff; margin-right:8px; }
+  button.ghost { background:#fff; color:#251f21; border:1px solid #eae9ea; }
+  #status, #heard { font-size:14px; color:#585254; } #heard { font-style: italic; }
+  a { color:#4e7f72; }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">Demo 0 - voice</span>
+  <h1>Hands-free slide control</h1>
+  <p>Whisper speech recognition running <b>entirely in your browser</b> (transformers.js, no server).
+  Grant the mic, then say <b>"Lanjut"</b> (next) or <b>"Kembali"</b> (back) - "next" / "back" work too.</p>
+
+  <div id="slide"><div class="n" id="snum"></div><h2 id="stitle"></h2><p id="sbody"></p></div>
+
+  <button id="start">&#127908; Start listening</button>
+  <button class="ghost" id="prev">&#8592; Kembali</button>
+  <button class="ghost" id="next">Lanjut &#8594;</button>
+  <p id="status">Model not loaded yet - first start downloads ~40 MB once, then it's cached.</p>
+  <p id="heard"></p>
+  <p><a href="../">&larr; all demos</a></p>
+</main>
+
+<script type="module">
+const SLIDES = [
+  ["Edge AI & Multimodal Apps", "This deck is being advanced by your voice - no cloud, no API key."],
+  ["One phone, four pipelines", "Mic, camera and sensors stream to local models. This browser tab is doing the same thing."],
+  ["Whisper, on-device", "The model transcribing you right now lives in this tab's memory, not a data center."],
+  ["Why it matters", "Predictable cost, privacy by physics, and it works when the Wi-Fi dies."],
+  ["Terima kasih!", "You just gave a voice-controlled presentation. Questions?"],
+];
+let idx = 0, busy = false;
+function render() {
+  document.getElementById('snum').textContent = `Slide ${idx + 1} / ${SLIDES.length}`;
+  document.getElementById('stitle').textContent = SLIDES[idx][0];
+  document.getElementById('sbody').textContent = SLIDES[idx][1];
+}
+function go(d) { idx = Math.min(SLIDES.length - 1, Math.max(0, idx + d)); render(); }
+document.getElementById('next').onclick = () => go(1);
+document.getElementById('prev').onclick = () => go(-1);
+render();
+
+const statusEl = document.getElementById('status'), heardEl = document.getElementById('heard');
+let transcriber = null;
+
+document.getElementById('start').onclick = async (e) => {
+  e.target.disabled = true;
+  statusEl.textContent = 'Loading Whisper (one-time download)...';
+  const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1');
+  transcriber = transcriber || await pipeline('automatic-speech-recognition', 'onnx-community/whisper-tiny', { device: 'wasm' });
+  statusEl.textContent = 'Model ready. Listening...';
+
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const ctx = new AudioContext({ sampleRate: 16000 });
+  const src = ctx.createMediaStreamSource(stream);
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  let buf = [];
+  src.connect(proc); proc.connect(ctx.destination);
+  proc.onaudioprocess = async (ev) => {
+    buf.push(new Float32Array(ev.inputBuffer.getChannelData(0)));
+    const total = buf.reduce((n, a) => n + a.length, 0);
+    if (total < 16000 * 3 || busy) return;      // transcribe every ~3 s
+    const audio = new Float32Array(total);
+    let off = 0; for (const a of buf) { audio.set(a, off); off += a.length; }
+    buf = [];
+    busy = true;
+    try {
+      const r = await transcriber(audio, { language: 'indonesian', task: 'transcribe' });
+      const text = (r.text || '').toLowerCase().trim();
+      if (text) {
+        heardEl.textContent = 'heard: "' + text + '"';
+        if (/lanjut|next|maju/.test(text)) go(1);
+        else if (/kembali|back|mundur/.test(text)) go(-1);
+      }
+    } catch (err) { statusEl.textContent = 'transcription error: ' + err.message; }
+    busy = false;
+  };
+};
+</script>
+</body>
+</html>

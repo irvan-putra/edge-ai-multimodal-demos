@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo 3 - Phone motion over MQTT</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#f4efec; color:#251f21; margin:0; padding:24px; }
+  main { max-width: 760px; margin: 0 auto; background:#fff; border-radius:24px; padding:28px; }
+  .tag { color:#4e7f72; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  .card { border:1px solid #eae9ea; border-radius:16px; padding:16px 18px; margin:12px 0; }
+  button { font-size:15px; padding:10px 18px; border:none; border-radius:12px; background:#73a89a; color:#fff; margin:4px 4px 4px 0; }
+  button.ghost { background:#fff; color:#251f21; border:1px solid #eae9ea; }
+  #log { background:#251f21; color:#d8d2d3; font-family:ui-monospace, monospace; font-size:12.5px;
+         border-radius:12px; padding:14px; height:220px; overflow-y:auto; white-space:pre-wrap; }
+  #flash { display:none; background:#73a89a; color:#fff; border-radius:12px; padding:14px;
+           text-align:center; font-weight:700; margin:10px 0; }
+  #broker-status { font-size:13px; color:#585254; } code { background:#f4efec; padding:1px 5px; border-radius:6px; }
+  a { color:#4e7f72; }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">Demo 3 - sensors</span>
+  <h1>Phone motion over MQTT</h1>
+  <p>Your phone's accelerometer, published to a <b>free public MQTT broker</b>
+  (<code>broker.emqx.io</code> over secure WebSocket) and consumed live below.
+  Shake the phone - the hardware loop fires. No shake? Use the simulator.</p>
+
+  <div class="card">
+    <b>1. Pair a session</b>
+    <p style="margin:6px 0">Session topic: <code id="topic"></code><br>
+    Open this same URL on the phone (session rides in the link):
+    <a id="pair-link" href="#">pairing link</a></p>
+    <p id="broker-status">broker: connecting...</p>
+  </div>
+
+  <div class="card">
+    <b>2. Publish (on the phone)</b><br>
+    <button id="pub">&#128202; Start publishing motion</button>
+    <span id="pub-status" style="font-size:13px;color:#585254"></span>
+  </div>
+
+  <div class="card">
+    <b>3. Watch the pipeline</b><br>
+    <button class="ghost" id="sim">Simulate a shake</button>
+    <div id="flash">&#9889; SHAKE - hardware loop fired</div>
+    <div id="log"></div>
+  </div>
+  <p><a href="../">&larr; all demos</a> &middot; Simulation fallback: if conference Wi-Fi blocks the broker,
+  "Simulate a shake" runs the same handler locally.</p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>
+const SHAKE_G = 2.2;
+const session = location.hash.slice(1) || Math.random().toString(36).slice(2, 8);
+if (!location.hash) history.replaceState(null, '', '#' + session);
+const topic = `demo-lab/${session}/sensors`;
+document.getElementById('topic').textContent = topic;
+document.getElementById('pair-link').href = location.href;
+
+const logEl = document.getElementById('log');
+function log(line) {
+  const t = new Date().toLocaleTimeString();
+  logEl.textContent = `[${t}] ${line}\n` + logEl.textContent.split('\n').slice(0, 200).join('\n');
+}
+let lastFire = 0;
+function handleEvent(ev) {
+  const mag = Math.sqrt(ev.x ** 2 + ev.y ** 2 + ev.z ** 2) / 9.81;
+  log(`x=${ev.x.toFixed(2)} y=${ev.y.toFixed(2)} z=${ev.z.toFixed(2)} | ${mag.toFixed(2)} g`);
+  if (mag > SHAKE_G && Date.now() - lastFire > 750) {
+    lastFire = Date.now();
+    const f = document.getElementById('flash');
+    f.style.display = 'block';
+    setTimeout(() => f.style.display = 'none', 900);
+    log(`>>> SHAKE ${mag.toFixed(1)} g -> hardware loop fired`);
+  }
+}
+
+const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', { reconnectPeriod: 3000 });
+const bs = document.getElementById('broker-status');
+client.on('connect', () => { bs.textContent = 'broker: connected (' + topic + ')'; client.subscribe(topic); });
+client.on('error', (e) => bs.textContent = 'broker: error - ' + e.message + ' (use the simulator)');
+client.on('close', () => bs.textContent = 'broker: disconnected, retrying...');
+client.on('message', (t, payload) => { try { handleEvent(JSON.parse(payload.toString())); } catch {} });
+
+document.getElementById('pub').onclick = async (e) => {
+  if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
+    await DeviceMotionEvent.requestPermission();
+  let last = 0;
+  window.addEventListener('devicemotion', (ev) => {
+    if (Date.now() - last < 100) return;
+    last = Date.now();
+    const a = ev.accelerationIncludingGravity || {};
+    client.publish(topic, JSON.stringify({ x: a.x || 0, y: a.y || 0, z: a.z || 0 }));
+  });
+  document.getElementById('pub-status').textContent = 'publishing at 10 Hz - shake the phone';
+  e.target.disabled = true;
+};
+
+document.getElementById('sim').onclick = () => {
+  // synthetic shake: a few gravity-spike events through the same handler
+  handleEvent({ x: 0, y: 0, z: 9.81 });
+  handleEvent({ x: 12, y: 18, z: 26 });
+  handleEvent({ x: 0, y: 0, z: 9.81 });
+};
+</script>
+</body>
+</html>

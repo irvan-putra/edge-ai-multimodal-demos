@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo 2 - Live dashboard (stlite)</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#f4efec; color:#251f21; margin:0; padding:24px; }
+  main { max-width: 900px; margin: 0 auto; background:#fff; border-radius:24px; padding:28px; }
+  .tag { color:#4e7f72; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  #root { margin-top:16px; } a { color:#4e7f72; }
+  .note { font-size:14px; color:#585254; }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">Demo 2 - dashboard</span>
+  <h1>Raised hands become a live dashboard</h1>
+  <p class="note">This is <b>real Streamlit code running in your browser</b> (stlite / Pyodide - no server).
+  It reads Demo 1's counts every second; with no camera running it falls back to a simulated feed,
+  labeled as such. First load downloads the Python runtime (~30 MB, cached after).
+  Run <a href="../demo1/">Demo 1</a> in another tab for the live feed. <a href="../">&larr; all demos</a></p>
+  <div id="root"></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.79.0/build/stlite.js"></script>
+<script>
+stlite.mount({
+  requirements: ["pandas"],
+  entrypoint: "streamlit_app.py",
+  files: {
+    "streamlit_app.py": `
+import json, time, random
+import pandas as pd
+import streamlit as st
+from js import localStorage
+
+st.set_page_config(page_title="Live Audience Dashboard", layout="wide")
+st.title("Live Audience Dashboard")
+
+def read_counts():
+    raw = localStorage.getItem("demoLabCounts")
+    if raw:
+        try:
+            d = json.loads(raw)
+            # live if the writer updated within the last 5 seconds
+            if time.time() * 1000 - d.get("t", 0) < 5000:
+                return d["people"], d["hands_up"], "live"
+        except Exception:
+            pass
+    return None, None, "simulated"
+
+if "history" not in st.session_state:
+    st.session_state.history = []
+if "sim" not in st.session_state:
+    st.session_state.sim = {"people": 7, "hands": 0}
+
+people, hands, mode = read_counts()
+if mode == "simulated":
+    s = st.session_state.sim
+    s["hands"] = max(0, min(s["people"], s["hands"] + random.choice([-1, 0, 0, 1])))
+    people, hands = s["people"], s["hands"]
+
+st.caption("Feed: **" + mode + "**" + (" (start Demo 1 in another tab for the real camera feed)" if mode == "simulated" else " (Demo 1 camera, this device)"))
+
+st.session_state.history.append({"t": time.strftime("%H:%M:%S"), "people": people, "hands_up": hands})
+st.session_state.history = st.session_state.history[-120:]
+
+c1, c2 = st.columns(2)
+c1.metric("People in the room", people)
+c2.metric("Hands up right now", hands)
+
+df = pd.DataFrame(st.session_state.history).set_index("t")
+st.line_chart(df)
+
+time.sleep(1)
+st.rerun()
+`,
+  },
+}, document.getElementById("root"));
+</script>
+</body>
+</html>

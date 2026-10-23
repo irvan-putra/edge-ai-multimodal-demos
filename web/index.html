@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edge AI Demo Lab - browser editions</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#f4efec; color:#251f21; margin:0; padding:24px; }
+  main { max-width: 720px; margin: 0 auto; background:#fff; border-radius:24px; padding:28px; }
+  h1 { margin: 0 0 4px; } .sub { color:#585254; margin-top:0; }
+  a.card { display:block; border:1px solid #eae9ea; border-radius:16px; padding:16px 18px; margin:12px 0;
+           text-decoration:none; color:#251f21; }
+  a.card:hover { border-color:#73a89a; }
+  a.card b { font-size: 17px; } a.card p { margin:6px 0 0; color:#585254; font-size:14px; }
+  .tag { color:#4e7f72; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  footer { color:#585254; font-size:13px; margin-top:18px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Edge AI Demo Lab</h1>
+  <p class="sub">Browser editions of the live demos from <i>Edge AI &amp; Multimodal Applications in Python</i> -
+  PythonID Jakarta, 31 Oct 2026. Everything below runs on your device; models download once, then inference is local.</p>
+
+  <a class="card" href="demo0/"><span class="tag">Demo 0 - voice</span><br><b>Hands-free slide control</b>
+    <p>Whisper running in your browser (transformers.js). Say "Lanjut" or "Kembali" - the mini deck obeys.</p></a>
+
+  <a class="card" href="demo1/"><span class="tag">Demo 1 - vision</span><br><b>The camera counts the room</b>
+    <p>MediaPipe pose on your webcam: counts people, detects raised hands. Feeds Demo 2 live.</p></a>
+
+  <a class="card" href="demo2-stlite/"><span class="tag">Demo 2 - dashboard</span><br><b>Raised hands become a dashboard</b>
+    <p>Real Streamlit, running in Pyodide in your browser (stlite). Reads Demo 1's counts, simulates when idle.</p></a>
+
+  <a class="card" href="demo3/"><span class="tag">Demo 3 - sensors</span><br><b>Phone motion over MQTT</b>
+    <p>Your phone's accelerometer published over MQTT (public broker) to a live event feed with shake detection.</p></a>
+
+  <footer>First load needs internet (models from public CDNs). After that, Demos 0-2 run fully on-device.
+  Demo 3 relays through a free public broker - no data is stored anywhere. Python originals: see the repo README.</footer>
+</main>
+</body>
+</html>

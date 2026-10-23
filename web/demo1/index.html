@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo 1 - The camera counts the room</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#f4efec; color:#251f21; margin:0; padding:24px; }
+  main { max-width: 760px; margin: 0 auto; background:#fff; border-radius:24px; padding:28px; }
+  .tag { color:#4e7f72; font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  .stage { position:relative; } video, canvas { width:100%; border-radius:16px; display:block; }
+  canvas { position:absolute; inset:0; }
+  .metrics { display:flex; gap:12px; margin:16px 0; }
+  .metric { flex:1; border:1px solid #eae9ea; border-radius:16px; padding:14px; text-align:center; }
+  .metric b { font-size:32px; display:block; } .metric span { color:#585254; font-size:13px; }
+  button { font-size:16px; padding:12px 22px; border:none; border-radius:12px; background:#73a89a; color:#fff; }
+  #status { font-size:14px; color:#585254; } a { color:#4e7f72; }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">Demo 1 - vision</span>
+  <h1>The camera counts the room</h1>
+  <p>MediaPipe pose detection on <b>your webcam, in your browser</b>. It counts people and
+  detects raised hands (wrist above nose). Open <a href="../demo2-stlite/">Demo 2</a> in another
+  tab and watch the dashboard follow.</p>
+  <div class="metrics">
+    <div class="metric"><b id="people">0</b><span>people</span></div>
+    <div class="metric"><b id="hands">0</b><span>hands up</span></div>
+  </div>
+  <div class="stage"><video id="cam" autoplay playsinline muted></video><canvas id="overlay"></canvas></div>
+  <p><button id="start">&#128247; Start camera</button></p>
+  <p id="status">Model not loaded yet - first start downloads ~10 MB once.</p>
+  <p><a href="../">&larr; all demos</a></p>
+</main>
+
+<script type="module">
+const MARGIN = 0.05;   // normalized: wrist must be this far above the nose
+const NOSE = 0, L_WRIST = 15, R_WRIST = 16;   // MediaPipe 33-landmark indices
+const chan = 'BroadcastChannel' in window ? new BroadcastChannel('demo-lab') : null;
+
+function publish(people, hands) {
+  const payload = { people, hands_up: hands, t: Date.now() };
+  localStorage.setItem('demoLabCounts', JSON.stringify(payload));
+  chan && chan.postMessage(payload);
+}
+
+document.getElementById('start').onclick = async (e) => {
+  e.target.disabled = true;
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = 'Loading pose model...';
+  const vision = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14');
+  const fileset = await vision.FilesetResolver.forVisionTasks(
+    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+  const landmarker = await vision.PoseLandmarker.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath:
+      'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task' },
+    runningMode: 'VIDEO', numPoses: 6,
+  });
+
+  const video = document.getElementById('cam');
+  video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { width: 640 } });
+  await video.play();
+  const canvas = document.getElementById('overlay');
+  const g = canvas.getContext('2d');
+  statusEl.textContent = 'Running. Raise a hand!';
+
+  function tick() {
+    if (video.videoWidth) {
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      const res = landmarker.detectForVideo(video, performance.now());
+      g.clearRect(0, 0, canvas.width, canvas.height);
+      let hands = 0;
+      for (const pose of res.landmarks || []) {
+        const nose = pose[NOSE], lw = pose[L_WRIST], rw = pose[R_WRIST];
+        const raised = (lw.y < nose.y - MARGIN) || (rw.y < nose.y - MARGIN);
+        if (raised) hands++;
+        for (const p of [nose, lw, rw]) {
+          g.beginPath();
+          g.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, 7);
+          g.fillStyle = raised ? '#ed313e' : '#73a89a';
+          g.fill();
+        }
+      }
+      document.getElementById('people').textContent = (res.landmarks || []).length;
+      document.getElementById('hands').textContent = hands;
+      publish((res.landmarks || []).length, hands);
+    }
+    requestAnimationFrame(tick);
+  }
+  tick();
+};
+</script>
+</body>
+</html>
